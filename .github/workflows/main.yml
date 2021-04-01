@@ -6,6 +6,10 @@ on:
   pull_request:
     branches: '*'
 
+defaults:
+  run:
+    shell: bash -l {0}
+
 jobs:
   test:
     name: Test
@@ -17,20 +21,27 @@ jobs:
         python-version: [ 3.9 ]
 
     steps:
-    - uses: actions/checkout@v2
+    - name: Checkout
+      uses: actions/checkout@v2
+
     - name: Setup conda
       uses: conda-incubator/setup-miniconda@v2
       with:
+        activate-environment: kernel_driver-dev
+        environment-file: dev-environment.yml
+        python-version: ${{ matrix.python-version }}
         mamba-version: "*"
+        auto-activate-base: false
         channels: conda-forge
-    - name: Mamba install dependencies
-      run: mamba install python=${{ matrix.python-version }} pip pyzmq python-dateutil rich xeus-python ipykernel pytest pytest-asyncio mypy flake8
+
     - name: Install kernel_driver
-      run: pip install --no-deps
+      run: pip install -e .
+
     - name: Check style
       run: |
         black --check kernel_driver
         flake8 --max-line-length 100 kernel_driver
+
     - name: Run tests
       run: |
         mypy kernel_driver

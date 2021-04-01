@@ -11,7 +11,7 @@ setup(
         'pyzmq',
         'python-dateutil',
         'rich',
-    ]
+    ],
     extras_require={
         'test': [
             'xeus-python',
