@@ -1,0 +1,37 @@
+name: CI
+
+on:
+  push:
+    branches: '*'
+  pull_request:
+    branches: '*'
+
+jobs:
+  test:
+    name: Test
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest]
+        python-version: [ 3.9 ]
+
+    steps:
+    - uses: actions/checkout@v2
+    - name: Setup conda
+      uses: conda-incubator/setup-miniconda@v2
+      with:
+        mamba-version: "*"
+        channels: conda-forge
+    - name: Mamba install dependencies
+      run: mamba install python=${{ matrix.python-version }} pip pyzmq python-dateutil rich xeus-python ipykernel pytest pytest-asyncio mypy flake8
+    - name: Install kernel_driver
+      run: pip install --no-deps
+    - name: Check style
+      run: |
+        black --check kernel_driver
+        flake8 --max-line-length 100 kernel_driver
+    - name: Run tests
+      run: |
+        mypy kernel_driver
+        py.test kernel_driver/tests

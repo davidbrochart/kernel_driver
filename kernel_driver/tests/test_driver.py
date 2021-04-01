@@ -1,19 +1,20 @@
 import os
-import asyncio
 
 import pytest
-from kernel_driver import write_connection_file, launch_kernel
+from kernel_driver import KernelDriver
 
 
 @pytest.mark.asyncio
-async def test_driver():
-    connection_file_path, cfg = write_connection_file()
-    assert os.path.exists(connection_file_path)
-    assert cfg["ip"] == "127.0.0.1"
-
+@pytest.mark.parametrize("kernel_name", ["xpython", "python3"])
+async def test_driver(kernel_name, capfd):
+    timeout = 1
     kernel_spec_path = (
-        os.environ["CONDA_PREFIX"] + "/share/jupyter/kernels/xpython/kernel.json"
+        os.environ["CONDA_PREFIX"] + f"/share/jupyter/kernels/{kernel_name}/kernel.json"
     )
-    p = await launch_kernel(kernel_spec_path, connection_file_path)
-    await asyncio.sleep(1)
-    p.kill()
+    kd = KernelDriver(kernel_spec_path, log=False)
+    await kd.start(timeout)
+    await kd.execute("print('Hello World!')", timeout)
+    await kd.stop()
+
+    out, err = capfd.readouterr()
+    assert out == "Hello World!\n"

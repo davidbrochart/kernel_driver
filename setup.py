@@ -7,11 +7,19 @@ setup(
     author='David Brochart',
     author_email='david.brochart@gmail.com',
     description='A Jupyter kernel driver',
+    require=[
+        'pyzmq',
+        'python-dateutil',
+        'rich',
+    ]
     extras_require={
         'test': [
             'xeus-python',
+            'ipykernel',
             'pytest',
             'pytest-asyncio',
+            'mypy',
+            'flake8',
         ],
     },
 )
