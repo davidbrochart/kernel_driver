@@ -2,14 +2,14 @@ from setuptools import setup
 
 setup(
     name="kernel_driver",
-    version="0.0.2",
+    version="0.0.3",
     url="https://github.com/davidbrochart/kernel_driver.git",
     author="David Brochart",
     author_email="david.brochart@gmail.com",
     description="A Jupyter kernel driver",
     packages=["kernel_driver"],
     python_requires=">=3.7",
-    install_require=[
+    install_requires=[
         "pyzmq",
         "python-dateutil",
         "rich",
