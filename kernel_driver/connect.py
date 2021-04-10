@@ -64,14 +64,17 @@ def write_connection_file(
 
 
 async def launch_kernel(
-    kernel_spec_path: str, connection_file_path: str
+    kernelspec_path: str, connection_file_path: str, capture_output: bool
 ) -> asyncio.subprocess.Process:
-    with open(kernel_spec_path) as f:
-        kernel_spec = json.load(f)
-    cmd = [s.format(connection_file=connection_file_path) for s in kernel_spec["argv"]]
-    p = await asyncio.create_subprocess_exec(
-        *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
-    )
+    with open(kernelspec_path) as f:
+        kernelspec = json.load(f)
+    cmd = [s.format(connection_file=connection_file_path) for s in kernelspec["argv"]]
+    if capture_output:
+        p = await asyncio.create_subprocess_exec(
+            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+        )
+    else:
+        p = await asyncio.create_subprocess_exec(*cmd)
     return p
 
 

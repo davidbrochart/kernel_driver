@@ -1,16 +1,19 @@
 import os
 import sys
+import signal
 import time
 import uuid
 from typing import Tuple, List, Dict, Any, Optional, cast
 
 from zmq.sugar.socket import Socket
+from rich.console import Console
 from rich.live import Live
 from rich.tree import Tree
 from rich.status import Status
 
 from .message import create_message, serialize, deserialize
 from .connect import write_connection_file, launch_kernel, connect_channel
+from .kernelspec import find_kernelspec
 
 success = "[green]✔[/green] "
 failure = "[red]✘[/red] "
@@ -58,10 +61,26 @@ def _output_hook_default(msg: Dict[str, Any]) -> None:
 
 
 class KernelDriver:
-    def __init__(self, kernel_spec_path: str, log: bool = True) -> None:
+    def __init__(
+        self,
+        kernel_name: str = "",
+        kernelspec_path: str = "",
+        connection_file: str = "",
+        capture_kernel_output: bool = True,
+        log: bool = True,
+        console: Console = None,
+    ) -> None:
         self.log = log
-        self.kernel_spec_path = kernel_spec_path
-        self.connection_file_path, self.connection_cfg = write_connection_file()
+        self.console = console
+        self.capture_kernel_output = capture_kernel_output
+        self.kernelspec_path = kernelspec_path or find_kernelspec(kernel_name)
+        if not self.kernelspec_path:
+            raise RuntimeError(
+                "Could not find a kernel, maybe you forgot to install one?"
+            )
+        self.connection_file_path, self.connection_cfg = write_connection_file(
+            connection_file
+        )
         self.key = cast(str, self.connection_cfg["key"])
         self.session_id = uuid.uuid4().hex
         self.msg_cnt = 0
@@ -70,12 +89,12 @@ class KernelDriver:
         if self.log:
             status0 = Status("Starting kernel")
             tree0 = Tree(status0)  # type: ignore
-            live = Live(tree0)
+            live = Live(tree0, refresh_per_second=10, console=self.console)
             live.start()
             status1 = Status("Launching kernel")
             tree1 = tree0.add(status1)  # type: ignore
         self.kernel_process = await launch_kernel(
-            self.kernel_spec_path, self.connection_file_path
+            self.kernelspec_path, self.connection_file_path, self.capture_kernel_output
         )
         self.shell_channel = connect_channel("shell", self.connection_cfg)
         self.iopub_channel = connect_channel("iopub", self.connection_cfg)
@@ -92,11 +111,12 @@ class KernelDriver:
             live.stop()
 
     async def stop(self) -> None:
+        self.kernel_process.send_signal(signal.SIGINT)
         self.kernel_process.kill()
         if self.log:
             status0 = Status("Stopping kernel")
             tree0 = Tree(status0)  # type: ignore
-            live = Live(tree0)
+            live = Live(tree0, refresh_per_second=10, console=self.console)
             live.start()
             tree0.add("Sent SIGKILL to process")
             status1 = Status("Waiting for the process to terminate")
@@ -112,7 +132,7 @@ class KernelDriver:
         if self.log:
             status0 = Status("Executing code")
             tree0 = Tree(status0)  # type: ignore
-            live = Live(tree0)
+            live = Live(tree0, refresh_per_second=10, console=self.console)
             live.start()
         content = {"code": code, "silent": False}
         msg = create_message(
