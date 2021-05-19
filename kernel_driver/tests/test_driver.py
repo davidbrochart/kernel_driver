@@ -12,8 +12,8 @@ async def test_driver(kernel_name, capfd):
         os.environ["CONDA_PREFIX"] + f"/share/jupyter/kernels/{kernel_name}/kernel.json"
     )
     kd = KernelDriver(kernelspec_path=kernelspec_path, log=False)
-    await kd.start(timeout)
-    await kd.execute("print('Hello World!')", timeout)
+    await kd.start(startup_timeout=timeout)
+    await kd.execute("print('Hello World!')", timeout=timeout)
     await kd.stop()
 
     out, err = capfd.readouterr()

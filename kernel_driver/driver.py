@@ -3,6 +3,7 @@ import sys
 import signal
 import time
 import uuid
+import asyncio
 from typing import Tuple, List, Dict, Any, Optional, cast
 
 from zmq.sugar.socket import Socket
@@ -84,6 +85,7 @@ class KernelDriver:
         self.key = cast(str, self.connection_cfg["key"])
         self.session_id = uuid.uuid4().hex
         self.msg_cnt = 0
+        self.execute_requests: Dict[str, Any] = {}
 
     async def start(self, startup_timeout: float = float("inf")) -> None:
         if self.log:
@@ -109,6 +111,9 @@ class KernelDriver:
             tree1.label = success + status1.status  # type: ignore
             tree0.label = success + status0.status  # type: ignore
             live.stop()
+        self.channel_tasks = []
+        self.channel_tasks.append(asyncio.create_task(self.listen_iopub()))
+        self.channel_tasks.append(asyncio.create_task(self.listen_shell()))
 
     async def stop(self) -> None:
         self.kernel_process.send_signal(signal.SIGINT)
@@ -127,8 +132,28 @@ class KernelDriver:
             tree0.label = success + status0.status  # type: ignore
             tree1.label = success + status1.status  # type: ignore
             live.stop()
+        for task in self.channel_tasks:
+            task.cancel()
 
-    async def execute(self, code: str, timeout: float = float("inf")) -> None:
+    async def listen_iopub(self):
+        while True:
+            msg = await receive_message(self.iopub_channel)  # type: ignore
+            msg_id = msg["parent_header"].get("msg_id")
+            if msg_id in self.execute_requests.keys():
+                self.execute_requests[msg_id]["iopub_msg"] = msg
+                self.execute_requests[msg_id]["iopub_event"].set()
+
+    async def listen_shell(self):
+        while True:
+            msg = await receive_message(self.shell_channel)  # type: ignore
+            msg_id = msg["parent_header"].get("msg_id")
+            if msg_id in self.execute_requests.keys():
+                self.execute_requests[msg_id]["shell_msg"] = msg
+                self.execute_requests[msg_id]["shell_event"].set()
+
+    async def execute(
+        self, code: str, timeout: float = float("inf"), msg_id: str = ""
+    ) -> None:
         if self.log:
             status0 = Status("Executing code")
             tree0 = Tree(status0)  # type: ignore
@@ -138,27 +163,35 @@ class KernelDriver:
         msg = create_message(
             "execute_request", content, session_id=self.session_id, msg_cnt=self.msg_cnt
         )
+        if msg_id:
+            msg["header"]["msg_id"] = msg_id
+        else:
+            msg_id = msg["header"]["msg_id"]
         self.msg_cnt += 1
         send_message(msg, self.shell_channel, self.key)
         deadline = time.time() + timeout
-        msg_id = msg["header"]["msg_id"]
+        self.execute_requests[msg_id] = {
+            "iopub_event": asyncio.Event(),
+            "shell_event": asyncio.Event(),
+        }
         if self.log:
             tree0.add("Sent execute request")
             status1 = Status("Waiting for idle execution state")
             tree1 = tree0.add(status1)  # type: ignore
         while True:
-            msg = await receive_message(  # type: ignore
-                self.iopub_channel, deadline_to_timeout(deadline)
-            )
-            if msg is None:
+            try:
+                await asyncio.wait_for(
+                    self.execute_requests[msg_id]["iopub_event"].wait(),
+                    deadline_to_timeout(deadline),
+                )
+            except asyncio.TimeoutError:
                 error_message = f"Kernel didn't respond in {timeout} seconds"
                 if self.log:
-                    tree0.label = failure + status0.status
-                    tree1.label = failure + status1.status
+                    tree0.label = failure + cast(str, status0.status)
+                    tree1.label = failure + cast(str, status1.status)
                     tree0.add(f"[red]{error_message}")
                 raise RuntimeError(error_message)
-            if msg["parent_header"].get("msg_id") != msg_id:
-                continue
+            msg = self.execute_requests[msg_id]["iopub_msg"]
             _output_hook_default(msg)
             if (
                 msg["header"]["msg_type"] == "status"
@@ -167,30 +200,29 @@ class KernelDriver:
                 if self.log:
                     tree1.label = success + status1.status  # type: ignore
                 break
-        while await receive_message(self.iopub_channel, 0) is not None:
-            pass
-        while True:
-            if self.log:
-                status1 = Status("Waiting for execute reply")
-                tree1 = tree0.add(status1)  # type: ignore
-            msg = await receive_message(  # type: ignore
-                self.shell_channel, deadline_to_timeout(deadline)
+            self.execute_requests[msg_id]["iopub_event"].clear()
+        if self.log:
+            status1 = Status("Waiting for execute reply")
+            tree1 = tree0.add(status1)  # type: ignore
+        try:
+            await asyncio.wait_for(
+                self.execute_requests[msg_id]["shell_event"].wait(),
+                deadline_to_timeout(deadline),
             )
-            if msg is None:
-                error_message = f"Kernel didn't respond in {timeout} seconds"
-                if self.log:
-                    tree0.label = failure + status0.status
-                    tree1.label = failure + status1.status
-                    tree0.add(f"[red]{error_message}")
-                raise RuntimeError(error_message)
-                break
-            if msg["parent_header"].get("msg_id") == msg_id:
-                if self.log:
-                    tree0.label = success + status0.status  # type: ignore
-                    tree1.label = success + status1.status  # type: ignore
-                break
+        except asyncio.TimeoutError:
+            error_message = f"Kernel didn't respond in {timeout} seconds"
+            if self.log:
+                tree0.label = failure + cast(str, status0.status)
+                tree1.label = failure + cast(str, status1.status)
+                tree0.add(f"[red]{error_message}")
+            raise RuntimeError(error_message)
+        msg = self.execute_requests[msg_id]["shell_msg"]
+        if self.log:
+            tree0.label = success + status0.status  # type: ignore
+            tree1.label = success + status1.status  # type: ignore
         if self.log:
             live.stop()
+        del self.execute_requests[msg_id]
 
     async def _wait_for_ready(self, timeout, tree):
         deadline = time.time() + timeout
