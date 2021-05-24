@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="kernel_driver",
-    version="0.0.5",
+    version="0.0.6",
     url="https://github.com/davidbrochart/kernel_driver.git",
     author="David Brochart",
     author_email="david.brochart@gmail.com",
