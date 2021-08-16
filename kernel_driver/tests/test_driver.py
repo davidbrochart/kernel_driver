@@ -5,7 +5,7 @@ from kernel_driver import KernelDriver
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("kernel_name", ["xpython", "python3"])
+@pytest.mark.parametrize("kernel_name", ["xpython", "python3", "akernel"])
 async def test_driver(kernel_name, capfd):
     timeout = 1
     kernelspec_path = (
