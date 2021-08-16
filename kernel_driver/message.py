@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 import uuid
 import hmac
 import hashlib
-from typing import List, Dict, Any
+from typing import List, Dict, Any, cast
 
 from zmq.utils import jsonapi
 from dateutil.parser import parse as dateutil_parse
@@ -20,7 +20,7 @@ def str_to_date(obj: Dict[str, Any]) -> Dict[str, Any]:
 
 
 def date_to_str(obj: Dict[str, Any]):
-    if "date" in obj:
+    if "date" in obj and type(obj["date"]) is not str:
         obj["date"] = obj["date"].isoformat().replace("+00:00", "Z")
     return obj
 
@@ -70,7 +70,7 @@ def pack(obj: Dict[str, Any]) -> bytes:
 
 
 def unpack(s: bytes) -> Dict[str, Any]:
-    return jsonapi.loads(s)
+    return cast(Dict[str, Any], jsonapi.loads(s))
 
 
 def sign(msg_list: List[bytes], key: str) -> bytes:

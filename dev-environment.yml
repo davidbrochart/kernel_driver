@@ -3,13 +3,3 @@ channels:
     - conda-forge
 dependencies:
     - pip
-    - pyzmq
-    - python-dateutil
-    - rich
-    - xeus-python
-    - ipykernel
-    - pytest
-    - pytest-asyncio
-    - mypy
-    - flake8
-    - black

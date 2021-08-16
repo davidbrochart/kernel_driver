@@ -16,12 +16,15 @@ setup(
     ],
     extras_require={
         "test": [
+            "types-python-dateutil",
             "xeus-python",
             "ipykernel",
+            "akernel",
             "pytest",
             "pytest-asyncio",
             "mypy",
             "flake8",
+            "black",
         ],
     },
     classifiers=(
