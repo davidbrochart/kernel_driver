@@ -86,6 +86,38 @@ class KernelDriver:
         self.session_id = uuid.uuid4().hex
         self.msg_cnt = 0
         self.execute_requests: Dict[str, Any] = {}
+        self.channel_tasks: List[asyncio.Task] = []
+
+    async def restart(self, startup_timeout: float = float("inf")) -> None:
+        if self.log:
+            status0 = Status("Restarting kernel")
+            tree0 = Tree(status0)  # type: ignore
+            live = Live(tree0, refresh_per_second=10, console=self.console)
+            live.start()
+            status1 = Status("Shutting down kernel")
+            tree1 = tree0.add(status1)  # type: ignore
+        for task in self.channel_tasks:
+            task.cancel()
+        msg = create_message("shutdown_request", content={"restart": True})
+        send_message(msg, self.control_channel, self.key)
+        while True:
+            msg = cast(Dict[str, Any], await receive_message(self.control_channel))
+            if msg["msg_type"] == "shutdown_reply" and msg["content"]["restart"]:
+                break
+        if self.log:
+            tree1.label = success + status1.status  # type: ignore
+            status1 = Status("Waiting for kernel ready")
+            tree1 = tree0.add(status1)  # type: ignore
+        else:
+            tree1 = None  # type: ignore
+        await self._wait_for_ready(startup_timeout, tree1)
+        if self.log:
+            tree1.label = success + status1.status  # type: ignore
+            tree0.label = success + status0.status  # type: ignore
+            live.stop()
+        self.channel_tasks = []
+        self.channel_tasks.append(asyncio.create_task(self.listen_iopub()))
+        self.channel_tasks.append(asyncio.create_task(self.listen_shell()))
 
     async def start(self, startup_timeout: float = float("inf")) -> None:
         if self.log:
@@ -99,6 +131,7 @@ class KernelDriver:
             self.kernelspec_path, self.connection_file_path, self.capture_kernel_output
         )
         self.shell_channel = connect_channel("shell", self.connection_cfg)
+        self.control_channel = connect_channel("control", self.connection_cfg)
         self.iopub_channel = connect_channel("iopub", self.connection_cfg)
         if self.log:
             tree1.label = success + status1.status  # type: ignore
@@ -111,7 +144,6 @@ class KernelDriver:
             tree1.label = success + status1.status  # type: ignore
             tree0.label = success + status0.status  # type: ignore
             live.stop()
-        self.channel_tasks = []
         self.channel_tasks.append(asyncio.create_task(self.listen_iopub()))
         self.channel_tasks.append(asyncio.create_task(self.listen_shell()))
 

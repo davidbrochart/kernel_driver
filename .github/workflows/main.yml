@@ -41,8 +41,8 @@ jobs:
       run: |
         black --check kernel_driver
         flake8 --max-line-length 100 kernel_driver
+        mypy kernel_driver
 
     - name: Run tests
       run: |
-        mypy kernel_driver
-        py.test kernel_driver/tests
+        pytest -v kernel_driver/tests
