@@ -45,7 +45,7 @@ jobs:
     - name: Check style
       run: |
         black --check kernel_driver
-        flake8 --max-line-length 100 kernel_driver
+        flake8 kernel_driver
         mypy kernel_driver
 
     - name: Run tests
