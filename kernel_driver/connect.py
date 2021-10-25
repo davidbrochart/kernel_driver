@@ -63,6 +63,13 @@ def write_connection_file(
     return fname, cfg
 
 
+def read_connection_file(fname: str = "") -> cfg_t:
+    with open(fname, "rt") as f:
+        cfg: cfg_t = json.load(f)
+
+    return cfg
+
+
 async def launch_kernel(
     kernelspec_path: str, connection_file_path: str, capture_output: bool
 ) -> asyncio.subprocess.Process:
@@ -71,7 +78,7 @@ async def launch_kernel(
     cmd = [s.format(connection_file=connection_file_path) for s in kernelspec["argv"]]
     if capture_output:
         p = await asyncio.create_subprocess_exec(
-            *cmd, stdout=asyncio.subprocess.PIPE, stderr=asyncio.subprocess.PIPE
+            *cmd, stdout=asyncio.subprocess.DEVNULL, stderr=asyncio.subprocess.STDOUT
         )
     else:
         p = await asyncio.create_subprocess_exec(*cmd)
